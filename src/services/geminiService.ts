@@ -25,10 +25,35 @@ export interface SegmentationRequest {
   query: string; // "the object at pixel (x,y)" or "the red car"
 }
 
+interface ContentPart {
+  text?: string;
+  inlineData?: {
+    mimeType: string;
+    data: string;
+  };
+}
+
+interface GeminiErrorDetail {
+  '@type': string;
+  retryDelay?: string;
+}
+
+interface GeminiErrorResponse {
+  code?: number;
+  message?: string;
+  details?: GeminiErrorDetail[];
+}
+
+interface GeminiApiError {
+  code?: number;
+  message?: string;
+  error?: GeminiErrorResponse;
+}
+
 export class GeminiService {
   async generateImage(request: GenerationRequest): Promise<string[]> {
     try {
-      const contents: any[] = [{ text: request.prompt }];
+      const contents: ContentPart[] = [{ text: request.prompt }];
 
       // Add reference images if provided
       if (request.referenceImages && request.referenceImages.length > 0) {
@@ -58,24 +83,27 @@ export class GeminiService {
       }
 
       return images;
-    } catch (error: any) {
-      console.error('Error generating image:', error);
+    } catch (error: unknown) {
+      const apiError = error as GeminiApiError;
+      console.error('Error generating image:', apiError);
 
       // Handle rate limit errors specifically
-      if (error?.error?.code === 429 ||
-        error?.error?.error?.code === 429 ||
-        error?.code === 429 ||
-        (error?.error?.message && error.error.message.includes('quota'))) {
-        throw new Error('Rate limit exceeded. Please wait a few minutes before trying again, or upgrade your Google AI Studio plan for higher quotas.');
+      if (apiError?.error?.code === 429 ||
+        apiError?.code === 429 ||
+        (apiError?.error?.message && apiError.error.message.includes('quota'))) {
+        let retryDelay = 'a few minutes';
+        if (apiError.error?.details) {
+          const retryInfo = apiError.error.details.find((detail: GeminiErrorDetail) => detail['@type'] === 'type.googleapis.com/google.rpc.RetryInfo');
+          if (retryInfo?.retryDelay) {
+            retryDelay = retryInfo.retryDelay;
+          }
+        }
+        throw new Error(`Rate limit exceeded. Please wait ${retryDelay} before trying again, or upgrade your Google AI Studio plan for higher quotas.`);
       }
 
       // Handle other API errors
-      if (error?.error?.message) {
-        throw new Error(`API Error: ${error.error.message}`);
-      }
-
-      if (error?.error?.error?.message) {
-        throw new Error(`API Error: ${error.error.error.message}`);
+      if (apiError?.error?.message) {
+        throw new Error(`API Error: ${apiError.error.message}`);
       }
 
       throw new Error('Failed to generate image. Please try again.');
@@ -84,7 +112,7 @@ export class GeminiService {
 
   async editImage(request: EditRequest): Promise<string[]> {
     try {
-      const contents = [
+      const contents: ContentPart[] = [
         { text: this.buildEditPrompt(request) },
         {
           inlineData: {
@@ -137,9 +165,9 @@ export class GeminiService {
     }
   }
 
-  async segmentImage(request: SegmentationRequest): Promise<any> {
+  async segmentImage(request: SegmentationRequest): Promise<Record<string, unknown>> {
     try {
-      const prompt = [
+      const prompt: ContentPart[] = [
         {
           text: `Analyze this image and create a segmentation mask for: ${request.query}
 
@@ -172,7 +200,7 @@ Only segment the specific object or region requested. The mask should be a binar
       if (!responseText) {
         throw new Error('No response text received from API');
       }
-      return JSON.parse(responseText);
+      return JSON.parse(responseText) as Record<string, unknown>;
     } catch (error) {
       console.error('Error segmenting image:', error);
       throw new Error('Failed to segment image. Please try again.');
