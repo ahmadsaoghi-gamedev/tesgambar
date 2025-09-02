@@ -61,8 +61,11 @@ export class GeminiService {
     } catch (error: any) {
       console.error('Error generating image:', error);
 
-      // Handle rate limit errors specifically (ApiError structure)
-      if (error?.error?.code === 429 || error?.error?.error?.code === 429) {
+      // Handle rate limit errors specifically (multiple possible error structures)
+      if (error?.error?.code === 429 ||
+        error?.error?.error?.code === 429 ||
+        error?.code === 429 ||
+        (error?.error?.message && error.error.message.includes('quota'))) {
         throw new Error('Rate limit exceeded. Please wait a few minutes before trying again, or upgrade your Google AI Studio plan for higher quotas.');
       }
 
@@ -73,6 +76,10 @@ export class GeminiService {
 
       if (error?.error?.error?.message) {
         throw new Error(`API Error: ${error.error.error.message}`);
+      }
+
+      if (error?.message) {
+        throw new Error(`Error: ${error.message}`);
       }
 
       throw new Error('Failed to generate image. Please try again.');
