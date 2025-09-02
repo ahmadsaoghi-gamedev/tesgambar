@@ -17,7 +17,7 @@ export const useImageGeneration = () => {
     },
     onSuccess: (images, request) => {
       if (images.length > 0) {
-        const outputAssets: Asset[] = images.map((base64, index) => ({
+        const outputAssets: Asset[] = images.map((base64) => ({
           id: generateId(),
           type: 'output',
           url: `data:image/png;base64,${base64}`,
@@ -35,15 +35,7 @@ export const useImageGeneration = () => {
             seed: request.seed,
             temperature: request.temperature
           },
-          sourceAssets: request.referenceImage ? [{
-            id: generateId(),
-            type: 'original',
-            url: `data:image/png;base64,${request.referenceImages[0]}`,
-            mime: 'image/png',
-            width: 1024,
-            height: 1024,
-            checksum: request.referenceImages[0].slice(0, 32)
-          }] : request.referenceImages ? request.referenceImages.map((img, index) => ({
+          sourceAssets: request.referenceImages ? request.referenceImages.map((img) => ({
             id: generateId(),
             type: 'original' as const,
             url: `data:image/png;base64,${img}`,
@@ -77,6 +69,8 @@ export const useImageGeneration = () => {
     },
     onError: (error) => {
       console.error('Generation failed:', error);
+      // Display a more user-friendly error message
+      alert(`Generation failed: ${error.message}`);
       setIsGenerating(false);
     }
   });
@@ -99,13 +93,14 @@ export const useImageEditing = () => {
     selectedGenerationId,
     currentProject,
     seed,
-    temperature 
+    temperature,
+    uploadedImages
   } = useAppStore();
 
   const editMutation = useMutation({
     mutationFn: async (instruction: string) => {
       // Always use canvas image as primary target if available, otherwise use first uploaded image
-      const sourceImage = canvasImage || uploadedImages[0];
+      const sourceImage = canvasImage || (uploadedImages.length > 0 ? uploadedImages[0] : null);
       if (!sourceImage) throw new Error('No image to edit');
       
       // Convert canvas image to base64
@@ -208,7 +203,7 @@ export const useImageEditing = () => {
         referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
         maskImage,
         temperature,
-        seed
+        seed: seed === null ? undefined : seed, // Convert null to undefined for EditRequest
       };
       
       const images = await geminiService.editImage(request);
@@ -219,7 +214,7 @@ export const useImageEditing = () => {
     },
     onSuccess: ({ images, maskedReferenceImage }, instruction) => {
       if (images.length > 0) {
-        const outputAssets: Asset[] = images.map((base64, index) => ({
+        const outputAssets: Asset[] = images.map((base64) => ({
           id: generateId(),
           type: 'output',
           url: `data:image/png;base64,${base64}`,

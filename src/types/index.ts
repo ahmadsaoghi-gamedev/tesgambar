@@ -9,9 +9,10 @@ export interface Asset {
 }
 
 export interface Generation {
-  id: string;
+  id:string;
   prompt: string;
   parameters: {
+    aspectRatio: string;
     seed?: number;
     temperature?: number;
   };
